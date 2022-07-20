@@ -8,9 +8,11 @@ If you want to end execution of program press Esc.
 
 ## Building
 
-To build program on Linux Mint use these commands
+To build program on Linux use these commands
 
 ```bash
-cmake --configure . -B build
-cmake --build build --target all
+cmake -B build
+cmake --build build
 ```
+
+Tested on Linux Mint 20.2 Uma and Fedora
