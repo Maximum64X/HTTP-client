@@ -44,24 +44,6 @@ int getKey() {
     return key;
 }
 
-string getLine(int socketDescriptor)
-{
-    string line = "";
-    char symbol, previousSymbol = 0;
-    while(read(socketDescriptor, &symbol, 1)!=0)
-    {
-        line += symbol;
-
-        // Stop if it is end of line
-        if(previousSymbol == '\r' && symbol == '\n')
-        {
-            break;
-        }
-        previousSymbol = symbol;
-    }
-    return line;
-}
-
 void sendRequest()
 {
     int socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
@@ -97,89 +79,21 @@ void sendRequest()
             exit(1);
         }
 
-        bool chunked = 0;
         string response;
-        string line;
-        int contentLength = 0;
-        while((line = getLine(socketDescriptor)) != "")
+        char buffer[1024];
+        // Wait for first byte of response
+        recv(socketDescriptor, buffer, 0, 0);
+        while(recv(socketDescriptor, buffer, strlen(buffer), MSG_DONTWAIT) != -1)
         {
-            response += line;
-
-            int pos = line.find(":");
-            string leftLine = line.substr(0, ++pos);
-            if(leftLine == "Content-Length:")
-            {
-                contentLength = stoi(line.substr(++pos));
-                break;
-            }
-
-            if(line == "Transfer-Encoding: chunked\r\n")
-            {
-                chunked = 1;
-                break;
-            }
-
-            if(line == "\r\n")
-            {
-                cerr << "Error: head of the server response read, but neither \"Transfer-Encoding: chunked\" nor \"Content-Length\" found!" << endl;
-                exit(1);
-            }
-        }
-
-        if(contentLength)
-        {
-            // Skip remaining lines in head
-            do
-            {
-                line = getLine(socketDescriptor);
-                response += line;
-            } while (line != "\r\n");
-
-            char *buffer = new char[contentLength + 1];
-            if(recv(socketDescriptor, buffer, contentLength, MSG_WAITALL) < 0)
-            {
-                perror("recv");
-                exit(1);
-            }
-            buffer[contentLength] = '\0';
             response += buffer;
-            delete[] buffer;
-        }
-
-        while(chunked)
-        {
-            line = getLine(socketDescriptor); // It will return \r\n line
-            response += line;
-
-            line = getLine(socketDescriptor);
-            response += line;
-            int chunkSize = stoi(line, NULL, 16);
-            if(chunkSize == 0)
-            {
-                break;
-            }
-
-            char *buffer = new char[chunkSize + 1];
-            if(recv(socketDescriptor, buffer, chunkSize, MSG_WAITALL) < 0)
-            {
-                perror("Function recv");
-                exit(1);
-            }
-            buffer[chunkSize] = '\0';
-            response += buffer;
-            delete[] buffer;
-        }
-
-        if(chunked)
-        {
-            line = getLine(socketDescriptor); // It will return \r\n line
-            response += line;
+            // Wait for next part of response
+            this_thread::sleep_for(chrono::nanoseconds(1));
         }
 
         // Wait if main thread not ended working with vector
         while(messageRead)
         {
-            this_thread::sleep_for(chrono::milliseconds(10));
+            this_thread::sleep_for(chrono::milliseconds(1));
         }
         charVector.insert(charVector.end(), response.begin(), response.end());
         messageRead = 1;
@@ -211,7 +125,6 @@ int main()
                 charVector.pop_back();
             }
             messageRead = 0;
-            cout << endl << endl << endl << endl;
         }
 
         if(getKey() == escapeCode)
