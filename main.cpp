@@ -98,7 +98,15 @@ void sendRequest()
         charVector.insert(charVector.end(), response.begin(), response.end());
         messageRead = 1;
 
-        this_thread::sleep_for(chrono::seconds(5));
+        // Increases the speed of response to pressing the Esc key
+        for(int i = 0; i < 50; i++)
+        {
+            if(!loop)
+            {
+                break;
+            }
+            this_thread::sleep_for(chrono::milliseconds(100));
+        }
     }
     close(socketDescriptor);
 
