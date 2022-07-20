@@ -6,20 +6,23 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <netdb.h>
 
 using namespace std;
 
 atomic<bool> loop{1};
 atomic<bool> secondThreadEnded{0};
 atomic<bool> messageRead{0};
+
 vector<char> charVector;
 
-// This function for properly handle of pressing the escape key
+const char hostName[] = "www.google.com";
+
 int getKey() {
     struct termios originalTerminalAttributes;
     struct termios newTerminalAttributes;
 
-    /* set the terminal to raw mode */
+    // Set the terminal to raw mode
     tcgetattr(fileno(stdin), &originalTerminalAttributes);
     memcpy(&newTerminalAttributes, &originalTerminalAttributes, sizeof(struct termios));
     newTerminalAttributes.c_lflag &= ~(ECHO|ICANON);
@@ -27,15 +30,15 @@ int getKey() {
     newTerminalAttributes.c_cc[VMIN] = 0;
     tcsetattr(fileno(stdin), TCSANOW, &newTerminalAttributes);
 
-    /* read a character from the stdin stream without blocking */
-    /*   returns EOF (-1) if no character is available */
+    // Read a character from the stdin stream without blocking
+    // Returns EOF (-1) if no character is available
     int key = fgetc(stdin);
     if(key == -1)
     {
         rewind(stdin);
     }
 
-    /* restore the original terminal attributes */
+    // Restore the original terminal attributes
     tcsetattr(fileno(stdin), TCSANOW, &originalTerminalAttributes);
 
     return key;
@@ -64,27 +67,33 @@ void sendRequest()
     int socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
     if(socketDescriptor < 0)
     {
-        perror("Socket");
+        perror("Function socket");
         exit(1);
     }
 
+    struct hostent *remoteHost;
+    remoteHost = gethostbyname(hostName);
+
     struct sockaddr_in server;
     server.sin_family = AF_INET;
-    server.sin_addr.s_addr = inet_addr("142.250.185.196");
+    server.sin_addr.s_addr = inet_addr(inet_ntoa(*( struct in_addr*)remoteHost->h_addr_list[0]));
     server.sin_port = htons(80);
 
     if(connect(socketDescriptor, (struct sockaddr *)&server, sizeof(server)) < 0)
     {
-        perror("Connect");
+        perror("Function connect");
         exit(1);
     }
 
-    char message[] = "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n";
+    string message = string("GET / HTTP/1.1\r\nHost: ") + hostName + "\r\n\r\n";
+    const int length = message.size();
+    const char *request = message.c_str();
+
     while(loop)
     {
-        if(send(socketDescriptor, message, strlen(message), 0) < 0)
+        if(send(socketDescriptor, request, length, 0) < 0)
         {
-            perror("Send");
+            perror("Function send");
             exit(1);
         }
 
@@ -126,14 +135,15 @@ void sendRequest()
                 response += line;
             } while (line != "\r\n");
 
-            char buffer[contentLength];
-            if(recv(socketDescriptor, buffer, contentLength, 0) < 0)
+            char *buffer = new char[contentLength + 1];
+            if(recv(socketDescriptor, buffer, contentLength, MSG_WAITALL) < 0)
             {
                 perror("recv");
                 exit(1);
             }
             buffer[contentLength] = '\0';
             response += buffer;
+            delete[] buffer;
         }
 
         while(chunked)
@@ -149,20 +159,24 @@ void sendRequest()
                 break;
             }
 
-            char buffer[chunkSize];
-            if(recv(socketDescriptor, buffer, chunkSize, 0) < 0)
+            char *buffer = new char[chunkSize + 1];
+            if(recv(socketDescriptor, buffer, chunkSize, MSG_WAITALL) < 0)
             {
-                perror("recv");
+                perror("Function recv");
                 exit(1);
             }
+            buffer[chunkSize] = '\0';
             response += buffer;
+            delete[] buffer;
         }
 
         if(chunked)
         {
             line = getLine(socketDescriptor); // It will return \r\n line
+            response += line;
         }
 
+        // Wait if main thread not ended working with vector
         while(messageRead)
         {
             this_thread::sleep_for(chrono::milliseconds(10));
