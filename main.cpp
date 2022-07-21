@@ -80,11 +80,12 @@ void sendRequest()
         }
 
         string response;
-        char buffer[1024];
+        const int messageSize = 1024;
+        char buffer[messageSize];
         // Wait for first byte of response
         recv(socketDescriptor, buffer, 0, 0);
         int receivedBytes = 0;
-        while((receivedBytes = recv(socketDescriptor, buffer, 1024, MSG_DONTWAIT)) != -1)
+        while((receivedBytes = recv(socketDescriptor, buffer, messageSize, MSG_DONTWAIT)) != -1)
         {
             buffer[receivedBytes] = '\0';
             response += buffer;
