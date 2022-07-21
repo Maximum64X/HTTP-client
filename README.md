@@ -15,4 +15,7 @@ cmake -B build
 cmake --build build
 ```
 
-Tested on Linux Mint 20.2 Uma and Fedora
+Successfully tested on:
+- Linux Mint 20.2 Uma
+- Fedora
+- Ubuntu 22.04

@@ -1,5 +1,7 @@
 #include <iostream>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
 #include <atomic>
 #include <vector>
 #include <termios.h>
@@ -10,9 +12,13 @@
 
 using namespace std;
 
+std::mutex m;
+std::condition_variable cv;
+
 atomic<bool> loop{1};
-atomic<bool> secondThreadEnded{0};
 atomic<bool> messageRead{0};
+
+bool ready = false;
 
 vector<char> charVector;
 
@@ -46,6 +52,8 @@ int getKey() {
 
 void sendRequest()
 {
+    std::unique_lock<std::mutex> lk(m);
+
     int socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
     if(socketDescriptor < 0)
     {
@@ -113,7 +121,8 @@ void sendRequest()
     }
     close(socketDescriptor);
 
-    secondThreadEnded = 1;
+    ready = true;
+    std::notify_all_at_thread_exit(cv, std::move(lk));
     return;
 }
 
@@ -123,7 +132,7 @@ int main()
     secondThread.detach();
 
     const int escapeCode = 27;
-    while(!secondThreadEnded)
+    for(;;)
     {
         if(messageRead)
         {
@@ -141,8 +150,12 @@ int main()
         if(getKey() == escapeCode)
         {
             loop = 0;
+            break;
         }
         this_thread::sleep_for(chrono::milliseconds(100));
     }
+
+    std::unique_lock<std::mutex> lk(m);
+    cv.wait(lk, []{return ready;});
     return 0;
 }
