@@ -83,11 +83,13 @@ void sendRequest()
         char buffer[1024];
         // Wait for first byte of response
         recv(socketDescriptor, buffer, 0, 0);
-        while(recv(socketDescriptor, buffer, strlen(buffer), MSG_DONTWAIT) != -1)
+        int receivedBytes = 0;
+        while((receivedBytes = recv(socketDescriptor, buffer, 1024, MSG_DONTWAIT)) != -1)
         {
+            buffer[receivedBytes] = '\0';
             response += buffer;
             // Wait for next part of response
-            this_thread::sleep_for(chrono::nanoseconds(1));
+            this_thread::sleep_for(chrono::milliseconds(10));
         }
 
         // Wait if main thread not ended working with vector
